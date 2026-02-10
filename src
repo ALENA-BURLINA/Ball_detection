@@ -1,0 +1,98 @@
+#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/core/hal/intrin.hpp>
+#include <opencv2/core/hal/intrin_sse.hpp>
+#include <stdlib.h>
+#include <stdio.h>
+#include <iostream>
+#include <sstream>
+#include <vector>
+using namespace cv;
+using namespace std;
+
+
+void processImage(int Hmin1, int Smin1, int Vmin1, int Hmax1, int Smax1, int Vmax1, Mat& coloredimage, int param1, int param2, int minRadius, int maxRadius)
+{
+    Mat hsvimage;
+    cvtColor(coloredimage, hsvimage, COLOR_BGR2HSV);
+    Mat tresholdimg;
+    inRange(hsvimage, cv::Scalar(Hmin1, Smin1, Vmin1), cv::Scalar(Hmax1, Smax1, Vmax1), tresholdimg);
+    GaussianBlur(tresholdimg, tresholdimg, Size(9, 9), 1, 1);
+    erode(tresholdimg, tresholdimg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+    dilate(tresholdimg, tresholdimg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+    dilate(tresholdimg, tresholdimg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+    erode(tresholdimg, tresholdimg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+    vector<Vec3f> circles;
+    HoughCircles(tresholdimg, circles, HOUGH_GRADIENT, 1, tresholdimg.rows / 8, param1, param2, minRadius, maxRadius);
+    if (circles.size() == 0) return;
+    for (size_t i = 0; i < circles.size(); i++)
+    {
+        Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+        int radius = cvRound(circles[i][2]);
+        int Rvalue = radius;
+        int Xvalue = cvRound(circles[i][0]);
+        int Yvalue = cvRound(circles[i][1]);
+        circle(coloredimage, center, 3, Scalar(0, 255, 0), -1, 8, 0);
+        circle(coloredimage, center, radius, Scalar(0, 0, 255), 3, 8, 0);
+        string radiusStr = to_string(Rvalue);
+        string xcenterStr = to_string(Xvalue);
+        string ycenterStr = to_string(Yvalue);
+        putText(coloredimage, "(" + xcenterStr + "," + ycenterStr + ")", Point(Xvalue, Yvalue - 20), 1, 1, Scalar(0, 255, 0), 2);
+        cout << "center : " << center << "\nradius : " << radius << endl;
+    }
+    imshow("Thresholded Image", tresholdimg);
+    imshow("Original", coloredimage);
+}
+
+int main(int argc, char** argv)
+{
+    cv::VideoCapture cap(2);
+    if (!cap.isOpened()) {
+        return -1;
+    }
+    namedWindow("Control", cv::WINDOW_AUTOSIZE);
+    namedWindow("Haff", cv::WINDOW_AUTOSIZE);
+    double width = cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+    double height = cap.set(cv::CAP_PROP_FRAME_HEIGHT, 860);
+    int Hmin1 = 100;
+    int Smin1 = 50;
+    int Vmin1 = 50;
+    int Hmax1 = 130;
+    int Smax1 = 255;
+    int Vmax1 = 255;
+    int param1 = 50;
+    int param2 = 10;
+    int minRadius = 0;
+    int maxRadius = 100;
+    Mat ImgTmg;
+    cap.read(ImgTmg);
+    createTrackbar("LowH", "Control", &Hmin1, 179);
+    createTrackbar("HighH", "Control", &Hmax1, 179);
+    createTrackbar("LowS", "Control", &Smin1, 255);
+    createTrackbar("HighS", "Control", &Smax1, 255);
+    createTrackbar("LowV", "Control", &Vmin1, 255);
+    createTrackbar("HighV", "Control", &Vmax1, 255);
+    createTrackbar("param1", "Haff", &param1, 255);
+    createTrackbar("param2", "Haff", &param2, 255);
+    createTrackbar("minRadius", "Haff", &minRadius, 255);
+    createTrackbar("maxRadius", "Haff", &maxRadius, 255);
+    Mat imgLines = Mat::zeros(ImgTmg.size(), CV_8UC3);
+    while (true)
+    {
+        Mat coloredimage;
+        bool bSuccess = cap.read(coloredimage);
+        if (!bSuccess) {
+            cout << "Cannot read";
+            return -1;
+        }
+        medianBlur(coloredimage, coloredimage, 3);
+        processImage(Hmin1, Smin1, Vmin1, Hmax1, Smax1, Vmax1, coloredimage, param1, param2, minRadius, maxRadius); 
+        if (waitKey(30) == 27)
+        {
+            cout << "esc key is pressed by user" << endl;
+            break;
+        }
+    }
+}
